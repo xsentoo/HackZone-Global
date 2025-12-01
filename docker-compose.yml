@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # --- 1. Le MySQL ---
+  mysqldb:
+    image: mysql:8.0
+    container_name: hackzone-mysql-docker
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - mysql_data_docker:/var/lib/mysql
+    networks:
+      - hackzone-net  # <--- On l'ajoute au réseau
+
+  # --- 2. HackZone ---
+  hackzone:
+    build: ./HackZone
+    container_name: hackzone-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysqldb
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/HackZone?allowPublicKeyRetrieval=true&useSSL=false
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+    networks:
+      - hackzone-net  # <--- On l'ajoute au réseau
+
+  # --- 3. TargetApp ---
+  targetapp:
+    build: ./TargetApp
+    container_name: target-app
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysqldb
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysqldb:3306/TargetDB?allowPublicKeyRetrieval=true&useSSL=false
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+    networks:
+      - hackzone-net  # <--- On l'ajoute au réseau
+
+  # --- 4. PhpMyAdmin ---
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: hackzone-pma
+    ports:
+      - "8088:80"
+    environment:
+      PMA_HOST: mysqldb
+      MYSQL_ROOT_PASSWORD: root
+    depends_on:
+      - mysqldb
+    networks:
+      - hackzone-net  # <--- On l'ajoute au réseau
+
+# Définition des volumes
+volumes:
+  mysql_data_docker:
+
+# --- NOUVEAU : Définition du réseau ---
+networks:
+  hackzone-net:
+    driver: bridge
