@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <title>Boutique Officielle</title>
+  <style>
+    body { font-family: 'Courier New', monospace; background: #222; color: #eee; padding: 20px; text-align: center; }
+    .container { max-width: 800px; margin: 0 auto; background: #333; padding: 20px; border-radius: 10px; }
+    h1 { color: #00d2ff; }
+    .product-list { margin-top: 20px; text-align: left; }
+    .product-item { background: #444; padding: 10px; margin: 5px 0; border-left: 5px solid #00d2ff; }
+    .price { float: right; color: #ffeb3b; font-weight: bold; }
+    .debug { margin-top: 30px; padding: 10px; background: #000; color: lime; border: 1px dashed lime; font-size: 0.9em; }
+    input { padding: 8px; width: 60%; background: #222; border: 1px solid #555; color: white; }
+    button { padding: 8px 15px; background: #00d2ff; border: none; cursor: pointer; color: black; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🛒 HackZone Shop</h1>
+  <p>Filtrer les produits par catégorie :</p>
+
+  <form action="/shop" method="get">
+    <input type="text" name="category" placeholder="Ex: Vêtements, Accessoires...">
+    <button type="submit">Filtrer</button>
+  </form>
+
+  <div class="product-list">
+    <div th:each="prod : ${products}" class="product-item">
+      <span th:text="${prod.name}">Nom du produit</span>
+      <span class="price" th:text="${prod.price} + ' €'">Prix</span>
+    </div>
+  </div>
+
+  <div th:if="${error}" style="color: red; margin-top: 10px;">
+    <strong>Oups :</strong> <span th:text="${error}"></span>
+  </div>
+
+  <div class="debug">
+    <strong>Requête SQL exécutée :</strong><br>
+    <span th:text="${lastQuery}">SELECT...</span>
+  </div>
+</div>
+
+</body>
+</html>

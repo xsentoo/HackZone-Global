@@ -58,6 +58,7 @@ public class GamificationController {
         }
     }
 
+
     //  c'est ici on gere les niveau
     private void updateLevel(UserEntity user) {
         int p = user.getPoint();
