@@ -28,7 +28,7 @@ public class VulnerableController {
     @PersistenceContext
     private EntityManager entityManager;
 
-    // --- METHODE UTILITAIRE POUR L'URL JDBC (Fix Docker/Localhost) ---
+    // --- FIX DOCKER : Méthode utilitaire pour l'URL JDBC ---
     private String getJdbcUrl() {
         String dbHost = System.getenv("DB_HOST");
         String dbPort = System.getenv("DB_PORT");
@@ -39,16 +39,12 @@ public class VulnerableController {
         return "jdbc:mysql://" + dbHost + ":" + dbPort + "/TargetDB?allowPublicKeyRetrieval=true&useSSL=false&useUnicode=true&characterEncoding=UTF-8";
     }
 
-    // --- PAGE D'ACCUEIL ---
+    // --- ROUTES BASIQUES ---
     @GetMapping("/")
-    public String loginPage(){
-        return "login";
-    }
+    public String loginPage(){ return "login"; }
 
     @GetMapping("/login")
-    public String showLoginForm() {
-        return "login";
-    }
+    public String showLoginForm() { return "login"; }
 
     @GetMapping("/ssh-challenge")
     public String showSSHChallenge() { return "ssh-challenge"; }
@@ -56,13 +52,10 @@ public class VulnerableController {
     @GetMapping("/vpn-challenge")
     public String showVpnChallenge() { return "vpn-challenge"; }
 
-    // --- TRAITEMENT LOGIN (SQL INJECTION NIVEAU 1) ---
+    // --- LOGIN VULNÉRABLE (SQLi Niveau 1) ---
     @PostMapping("/login")
     public String login(@RequestParam String username, @RequestParam String password, Model model){
-        // Faille : Concaténation directe
         String sql = "SELECT * FROM Users WHERE username = '" + username + "' and password = '" + password + "'";
-        System.out.println("Requete login exécutée : " + sql);
-
         try {
             Query query = entityManager.createNativeQuery(sql);
             List result = query.getResultList();
@@ -71,7 +64,6 @@ public class VulnerableController {
                 Object[] userRow = (Object[]) result.get(0);
                 String name = (String) userRow[1];
                 String secret = (String) userRow[3];
-
                 model.addAttribute("username" , name);
                 model.addAttribute("secret", secret);
                 return "dashboard";
@@ -85,18 +77,14 @@ public class VulnerableController {
         }
     }
 
-    // --- BOUTIQUE (SQL INJECTION NIVEAU 2 - UNION) ---
+    // --- SHOP VULNÉRABLE (SQLi Niveau 2) ---
     @GetMapping("/shop")
     public String shopPage(@RequestParam(required = false, defaultValue = "Vêtements") String category, Model model) {
         List<Map<String, String>> products = new ArrayList<>();
         String error = null;
-
-        // Utilisation de la méthode corrigée pour l'URL
         String url = getJdbcUrl();
-        String user = "root";
-        String password = "root";
 
-        try (Connection con = DriverManager.getConnection(url, user, password);
+        try (Connection con = DriverManager.getConnection(url, "root", "root");
              Statement stmt = con.createStatement()) {
 
             String sql = "SELECT name, price FROM Products WHERE category = '" + category + "'";
@@ -118,26 +106,21 @@ public class VulnerableController {
         return "shop";
     }
 
-    // --- LIVRE D'OR (XSS STOCKÉ - ISOLÉ & AUTO-NETTOYANT) ---
+    // --- GUESTBOOK VULNÉRABLE (XSS Stocké) ---
     @GetMapping("/guestbook")
     public String guestbookPage(Model model, HttpServletResponse response, HttpSession session) {
-
-        // 1. LE FLAG (Dans le cookie)
         Cookie flagCookie = new Cookie("flag", "FLAG{XSS_MASTER_ALERT}");
-        flagCookie.setHttpOnly(false); // Accessible via JS (C'est le but du XSS)
+        flagCookie.setHttpOnly(false);
         flagCookie.setPath("/");
         flagCookie.setMaxAge(3600);
         response.addCookie(flagCookie);
 
         String sessionId = session.getId();
         List<String> comments = new ArrayList<>();
-
-        // Utilisation de la méthode corrigée pour l'URL (Compatible Docker)
         String url = getJdbcUrl();
 
         try (Connection con = DriverManager.getConnection(url, "root", "root")) {
-
-            // ÉTAPE A : On récupère les messages DE CET ÉTUDIANT UNIQUEMENT
+            // Lecture
             try (PreparedStatement pstmtSelect = con.prepareStatement("SELECT content FROM Comments WHERE session_id = ? ORDER BY id DESC")) {
                 pstmtSelect.setString(1, sessionId);
                 ResultSet rs = pstmtSelect.executeQuery();
@@ -145,18 +128,12 @@ public class VulnerableController {
                     comments.add(rs.getString("content"));
                 }
             }
-
-            // ÉTAPE B : AUTO-NETTOYAGE IMMÉDIAT (ACTIVÉ)
-            // On supprime les messages de la base juste après l'affichage.
-            // L'attaque s'exécutera dans le navigateur, mais au prochain refresh, tout sera propre.
+            // Auto-nettoyage
             try (PreparedStatement pstmtDelete = con.prepareStatement("DELETE FROM Comments WHERE session_id = ?")) {
                 pstmtDelete.setString(1, sessionId);
                 pstmtDelete.executeUpdate();
             }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        } catch (Exception e) { e.printStackTrace(); }
 
         model.addAttribute("comments", comments);
         return "guestbook";
@@ -164,22 +141,56 @@ public class VulnerableController {
 
     @PostMapping("/guestbook")
     public String postComment(@RequestParam String content, HttpSession session) {
-
-        // Utilisation de la méthode corrigée pour l'URL
         String url = getJdbcUrl();
         String sessionId = session.getId();
-
         try (Connection con = DriverManager.getConnection(url, "root", "root");
              PreparedStatement pstmt = con.prepareStatement("INSERT INTO Comments (content, session_id) VALUES (?, ?)")) {
-
             pstmt.setString(1, content);
-            pstmt.setString(2, sessionId); // On associe le message à la session
+            pstmt.setString(2, sessionId);
             pstmt.executeUpdate();
+        } catch (Exception e) { e.printStackTrace(); }
+        return "redirect:/guestbook";
+    }
 
+    // --- NOUVEAU : PROFIL VULNÉRABLE (CSRF) ---
+    @GetMapping("/profile")
+    public String profilePage(Model model) {
+        String url = getJdbcUrl();
+        String currentEmail = "Inconnu";
+        try (Connection con = DriverManager.getConnection(url, "root", "root");
+             PreparedStatement pstmt = con.prepareStatement("SELECT email FROM Users WHERE username = 'admin'")) {
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                currentEmail = rs.getString("email");
+            }
+        } catch (Exception e) { e.printStackTrace(); }
+
+        model.addAttribute("email", currentEmail);
+        return "profile";
+    }
+
+    @PostMapping("/profile/update-email")
+    public String updateEmail(@RequestParam String email, Model model) {
+        String url = getJdbcUrl();
+        String message = "";
+        String flag = "";
+
+        try (Connection con = DriverManager.getConnection(url, "root", "root");
+             PreparedStatement pstmt = con.prepareStatement("UPDATE Users SET email = ? WHERE username = 'admin'")) {
+            pstmt.setString(1, email);
+            pstmt.executeUpdate();
+            message = "Email mis à jour avec succès : " + email;
+
+            if ("hacker@csrf.com".equals(email)) {
+                flag = "BRAVO ! Voici votre flag : FLAG{CSRF_ATTACK_SUCCESS}";
+            }
         } catch (Exception e) {
+            message = "Erreur : " + e.getMessage();
             e.printStackTrace();
         }
-
-        return "redirect:/guestbook";
+        model.addAttribute("email", email);
+        model.addAttribute("message", message);
+        model.addAttribute("flag", flag);
+        return "profile";
     }
 }
